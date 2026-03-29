@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Pyramid DCT Forgery Detection System
 
 A multi-scale image forgery detection system using DCT-based frequency analysis, Gaussian pyramid decomposition, and statistical anomaly detection.
@@ -240,3 +241,6 @@ Tests cover:
 | matplotlib               | Publication-quality heatmap rendering |
 | Pillow                   | Supplementary image format support |
 | scikit-image             | Image processing utilities |
+=======
+# Pyramid-DCT-Forgery-Detection
+>>>>>>> c8f625ffe0f125edc0fa3d02ef0825a119e5747f
