@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pyramid DCT · Forgery Detection</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  /* ─── Design System ─── */
+  :root {
+    --bg:         #060810;
+    --bg-1:       #0c0f1a;
+    --bg-2:       #111528;
+    --border:     rgba(255,255,255,0.07);
+    --border-hi:  rgba(99,179,237,0.35);
+    --accent:     #63b3ed;
+    --accent-2:   #9f7aea;
+    --danger:     #fc8181;
+    --success:    #68d391;
+    --warn:       #f6ad55;
+    --text:       #e8eaf0;
+    --text-muted: #6b7a99;
+    --mono:       'Space Mono', monospace;
+    --sans:       'Syne', sans-serif;
+    --glow:       0 0 32px rgba(99,179,237,0.15);
+    --glow-sm:    0 0 12px rgba(99,179,237,0.1);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ─── Animated grid background ─── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(99,179,237,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(99,179,237,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ─── Glow orbs ─── */
+  .orb {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.12;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .orb-1 { width: 500px; height: 500px; background: var(--accent-2); top: -150px; right: -100px; }
+  .orb-2 { width: 400px; height: 400px; background: var(--accent);   bottom: -100px; left: -80px; }
+
+  /* ─── Layout ─── */
+  .wrapper {
+    position: relative;
+    z-index: 1;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 24px 80px;
+  }
+
+  /* ─── Header ─── */
+  header {
+    padding: 40px 0 48px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 48px;
+  }
+  .header-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: rgba(99,179,237,0.08);
+    border: 1px solid rgba(99,179,237,0.2);
+    padding: 4px 12px;
+    border-radius: 2px;
+    margin-bottom: 20px;
+  }
+  .header-badge::before { content: '●'; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  h1 {
+    font-size: clamp(28px, 5vw, 52px);
+    font-weight: 800;
+    line-height: 1.05;
+    letter-spacing: -1.5px;
+    background: linear-gradient(135deg, #e8eaf0 0%, #63b3ed 50%, #9f7aea 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 16px;
+  }
+  .subtitle {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-muted);
+    letter-spacing: 0.5px;
+    max-width: 560px;
+    line-height: 1.8;
+  }
+
+  /* ─── Upload Zone ─── */
+  .upload-zone {
+    background: var(--bg-1);
+    border: 1.5px dashed var(--border-hi);
+    border-radius: 6px;
+    padding: 56px 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 32px;
+  }
+  .upload-zone::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 50% 0%, rgba(99,179,237,0.06) 0%, transparent 60%);
+    pointer-events: none;
+  }
+  .upload-zone:hover,
+  .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(99,179,237,0.04);
+    box-shadow: var(--glow);
+  }
+  .upload-zone.drag-over { transform: scale(1.01); }
+
+  .upload-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 20px;
+    border: 1.5px solid rgba(99,179,237,0.3);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    background: rgba(99,179,237,0.06);
+  }
+  .upload-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+  .upload-sub {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 0.5px;
+  }
+  #file-input { display: none; }
+
+  /* ─── Preview Strip ─── */
+  .preview-strip {
+    display: none;
+    align-items: center;
+    gap: 20px;
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px 20px;
+    margin-bottom: 32px;
+  }
+  .preview-strip.visible { display: flex; }
+  .preview-thumb {
+    width: 72px;
+    height: 72px;
+    object-fit: cover;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+  }
+  .preview-info { flex: 1; }
+  .preview-name {
+    font-weight: 700;
+    font-size: 14px;
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 300px;
+  }
+  .preview-meta {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.5px;
+  }
+
+  /* ─── Controls ─── */
+  .controls-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    margin-bottom: 32px;
+  }
+  .control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 160px;
+  }
+  .control-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .control-group select,
+  .control-group input[type="range"] {
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 8px 12px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .control-group select:focus { border-color: var(--accent); }
+
+  /* Styled range */
+  input[type="range"] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 4px;
+    background: linear-gradient(to right, var(--accent) var(--pct, 50%), var(--bg-2) var(--pct, 50%));
+    border-radius: 2px;
+    cursor: pointer;
+    padding: 0 !important;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    background: var(--accent);
+    border-radius: 50%;
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 6px rgba(99,179,237,0.4);
+  }
+  .range-val {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    text-align: right;
+  }
+
+  /* ─── Analyze Button ─── */
+  .btn-analyze {
+    padding: 14px 36px;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+    color: #060810;
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+  }
+  .btn-analyze:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px rgba(99,179,237,0.3);
+  }
+  .btn-analyze:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  /* ─── Progress / Status ─── */
+  .status-bar {
+    display: none;
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px 24px;
+    margin-bottom: 32px;
+  }
+  .status-bar.visible { display: block; }
+  .status-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+  }
+  .progress-track {
+    height: 3px;
+    background: var(--bg-2);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    border-radius: 2px;
+    transition: width 0.4s ease;
+    width: 0%;
+  }
+  .progress-fill.indeterminate {
+    width: 40% !important;
+    animation: indeterminate 1.4s infinite ease-in-out;
+  }
+  @keyframes indeterminate {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(350%); }
+  }
+
+  /* ─── Verdict Card ─── */
+  .verdict-card {
+    display: none;
+    border-radius: 6px;
+    padding: 24px 28px;
+    margin-bottom: 32px;
+    border-left: 4px solid var(--accent);
+    background: var(--bg-1);
+    border-top: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .verdict-card.visible { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+  .verdict-card.authentic { border-left-color: var(--success); }
+  .verdict-card.suspicious { border-left-color: var(--warn); }
+  .verdict-card.tampered   { border-left-color: var(--danger); }
+  .verdict-card.heavy      { border-left-color: var(--accent-2); }
+
+  .verdict-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+  .verdict-text {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+  }
+  .verdict-card.authentic .verdict-text  { color: var(--success); }
+  .verdict-card.suspicious .verdict-text { color: var(--warn); }
+  .verdict-card.tampered .verdict-text   { color: var(--danger); }
+  .verdict-card.heavy .verdict-text      { color: var(--accent-2); }
+
+  .verdict-stats {
+    display: flex;
+    gap: 32px;
+    flex-wrap: wrap;
+    margin-left: auto;
+  }
+  .vstat { text-align: right; }
+  .vstat-val {
+    font-family: var(--mono);
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+    display: block;
+    letter-spacing: -0.5px;
+  }
+  .vstat-lbl {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  /* ─── Results Grid ─── */
+  .results-section { display: none; }
+  .results-section.visible { display: block; }
+
+  .section-title {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .image-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 16px;
+    margin-bottom: 48px;
+  }
+
+  .image-card {
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    transition: all 0.2s ease;
+  }
+  .image-card:hover {
+    border-color: var(--border-hi);
+    box-shadow: var(--glow-sm);
+  }
+  .image-card-header {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .image-card-title {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .image-card-badge {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 1px;
+    background: rgba(99,179,237,0.1);
+    color: var(--accent);
+    padding: 2px 6px;
+    border-radius: 2px;
+  }
+  .result-image {
+    width: 100%;
+    display: block;
+    cursor: zoom-in;
+    transition: transform 0.2s;
+  }
+  .result-image:hover { transform: scale(1.01); }
+
+  /* Wide card for composite */
+  .image-card.full-width { grid-column: 1 / -1; }
+
+  /* ─── Stats Table ─── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 48px;
+  }
+  .stat-tile {
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px 18px;
+    transition: border-color 0.2s;
+  }
+  .stat-tile:hover { border-color: var(--border-hi); }
+  .stat-tile-val {
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 4px;
+    letter-spacing: -0.5px;
+  }
+  .stat-tile-lbl {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  /* ─── Pyramid Levels Table ─── */
+  .pyramid-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 11px;
+    margin-bottom: 48px;
+  }
+  .pyramid-table th {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    font-size: 9px;
+    font-weight: 400;
+  }
+  .pyramid-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+  .pyramid-table tr:last-child td { border-bottom: none; }
+  .pyramid-table tr:hover td { background: rgba(255,255,255,0.02); }
+  .pyramid-table .num { color: var(--accent); }
+
+  /* ─── JSON Export ─── */
+  .json-block {
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px;
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.7;
+    color: #a0c4ff;
+    overflow-x: auto;
+    white-space: pre;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+
+  /* ─── Error ─── */
+  .error-box {
+    display: none;
+    background: rgba(252,129,129,0.07);
+    border: 1px solid rgba(252,129,129,0.25);
+    border-radius: 6px;
+    padding: 16px 20px;
+    margin-bottom: 24px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--danger);
+  }
+  .error-box.visible { display: block; }
+
+  /* ─── Lightbox ─── */
+  .lightbox {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(6,8,16,0.92);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(8px);
+  }
+  .lightbox.visible { display: flex; }
+  .lightbox img {
+    max-width: 90vw;
+    max-height: 90vh;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    box-shadow: 0 32px 80px rgba(0,0,0,0.8);
+  }
+  .lightbox-close {
+    position: absolute;
+    top: 24px; right: 24px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-muted);
+    cursor: pointer;
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 12px;
+    transition: color 0.2s;
+  }
+  .lightbox-close:hover { color: var(--text); }
+
+  /* ─── Responsive ─── */
+  @media (max-width: 600px) {
+    .controls-row { flex-direction: column; }
+    .verdict-stats { margin-left: 0; }
+  }
+
+  /* ─── Scrollbar ─── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--bg-2); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border-hi); }
+</style>
+</head>
+<body>
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+
+<div class="wrapper">
+
+  <!-- Header -->
+  <header>
+    <div class="header-badge">LIVE · DCT Analysis Engine</div>
+    <h1>Pyramid DCT<br>Forgery Detection</h1>
+    <p class="subtitle">
+      Multi-scale frequency analysis using Gaussian pyramids and 8×8 DCT blocks.
+      Detects copy-move, splicing, double-compression, and AI-generated artifacts.
+    </p>
+  </header>
+
+  <!-- Upload Zone -->
+  <div class="upload-zone" id="upload-zone">
+    <input type="file" id="file-input" accept=".jpg,.jpeg,.png,.bmp,.tiff,.webp" />
+    <div class="upload-icon">🔬</div>
+    <div class="upload-title">Drop image here or click to browse</div>
+    <div class="upload-sub">JPEG · PNG · BMP · TIFF · WEBP &nbsp;|&nbsp; Max recommended: 4096×4096</div>
+  </div>
+
+  <!-- Preview Strip -->
+  <div class="preview-strip" id="preview-strip">
+    <img class="preview-thumb" id="preview-thumb" src="" alt="preview" />
+    <div class="preview-info">
+      <div class="preview-name" id="preview-name">—</div>
+      <div class="preview-meta" id="preview-meta">—</div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls-row">
+    <div class="control-group">
+      <span class="control-label">Pyramid Levels</span>
+      <select id="pyramid-levels">
+        <option value="3">3 levels</option>
+        <option value="4" selected>4 levels (default)</option>
+        <option value="5">5 levels (deep)</option>
+      </select>
+    </div>
+    <div class="control-group" style="min-width:220px">
+      <span class="control-label">Mask Threshold &nbsp;<span class="range-val" id="thresh-val">AUTO</span></span>
+      <input type="range" id="threshold" min="0" max="100" value="0"
+             oninput="updateThreshDisplay(this.value)" />
+    </div>
+    <button class="btn-analyze" id="btn-analyze" disabled onclick="runAnalysis()">
+      <span>▶</span> Analyze Image
+    </button>
+  </div>
+
+  <!-- Status Bar -->
+  <div class="status-bar" id="status-bar">
+    <div class="status-label" id="status-label">INITIALIZING…</div>
+    <div class="progress-track">
+      <div class="progress-fill indeterminate" id="progress-fill"></div>
+    </div>
+  </div>
+
+  <!-- Error -->
+  <div class="error-box" id="error-box"></div>
+
+  <!-- Verdict -->
+  <div class="verdict-card" id="verdict-card">
+    <div>
+      <div class="verdict-label">Detection Verdict</div>
+      <div class="verdict-text" id="verdict-text">—</div>
+    </div>
+    <div class="verdict-stats">
+      <div class="vstat">
+        <span class="vstat-val" id="vs-fraction">—</span>
+        <span class="vstat-lbl">Tampered %</span>
+      </div>
+      <div class="vstat">
+        <span class="vstat-val" id="vs-score">—</span>
+        <span class="vstat-lbl">Anomaly Score</span>
+      </div>
+      <div class="vstat">
+        <span class="vstat-val" id="vs-conf">—</span>
+        <span class="vstat-lbl">Confidence</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Results Section -->
+  <div class="results-section" id="results-section">
+
+    <!-- Output Images -->
+    <div class="section-title">Output Visualizations</div>
+    <div class="image-grid">
+      <div class="image-card">
+        <div class="image-card-header">
+          <span class="image-card-title">Anomaly Heatmap</span>
+          <span class="image-card-badge">OVERLAY</span>
+        </div>
+        <img class="result-image" id="img-heatmap" src="" alt="Heatmap" onclick="openLightbox(this.src)" />
+      </div>
+      <div class="image-card">
+        <div class="image-card-header">
+          <span class="image-card-title">Forgery Mask</span>
+          <span class="image-card-badge">BINARY</span>
+        </div>
+        <img class="result-image" id="img-mask" src="" alt="Mask" onclick="openLightbox(this.src)" />
+      </div>
+      <div class="image-card">
+        <div class="image-card-header">
+          <span class="image-card-title">Pure Heatmap</span>
+          <span class="image-card-badge">INFERNO</span>
+        </div>
+        <img class="result-image" id="img-pure" src="" alt="Pure Heatmap" onclick="openLightbox(this.src)" />
+      </div>
+      <div class="image-card full-width">
+        <div class="image-card-header">
+          <span class="image-card-title">Composite Comparison</span>
+          <span class="image-card-badge">SIDE-BY-SIDE</span>
+        </div>
+        <img class="result-image" id="img-composite" src="" alt="Composite" onclick="openLightbox(this.src)" />
+      </div>
+    </div>
+
+    <!-- Stats Tiles -->
+    <div class="section-title">Detection Metrics</div>
+    <div class="stats-grid" id="stats-grid"></div>
+
+    <!-- Pyramid Levels Table -->
+    <div class="section-title">Pyramid Level Statistics</div>
+    <div style="background:var(--bg-1);border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-bottom:48px;">
+      <table class="pyramid-table" id="pyramid-table">
+        <thead>
+          <tr>
+            <th>Level</th>
+            <th>Resolution</th>
+            <th>Kurt Mean</th>
+            <th>Kurt Std</th>
+            <th>Entropy Mean</th>
+            <th>Entropy Std</th>
+            <th>Var Mean</th>
+            <th>Var Std</th>
+          </tr>
+        </thead>
+        <tbody id="pyramid-tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- JSON Export -->
+    <div class="section-title">Raw JSON Response</div>
+    <pre class="json-block" id="json-block"></pre>
+
+  </div>
+
+</div>
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <span class="lightbox-close">✕ CLOSE</span>
+  <img id="lightbox-img" src="" alt="fullscreen" onclick="event.stopPropagation()" />
+</div>
+
+<script>
+  const API = '';  // Same origin; change to http://localhost:8000 for dev
+  let uploadedImageId = null;
+  let uploadedFile    = null;
+
+  // ─── Drag & Drop ───────────────────────────────────────
+  const zone = document.getElementById('upload-zone');
+  const fileInput = document.getElementById('file-input');
+
+  zone.addEventListener('click', () => fileInput.click());
+  zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files.length) handleFile(fileInput.files[0]);
+  });
+
+  function handleFile(file) {
+    uploadedFile = file;
+    // Show preview
+    const url = URL.createObjectURL(file);
+    document.getElementById('preview-thumb').src = url;
+    document.getElementById('preview-name').textContent = file.name;
+    document.getElementById('preview-meta').textContent =
+      `${(file.size / 1024).toFixed(1)} KB  ·  ${file.type || 'image'}`;
+    document.getElementById('preview-strip').classList.add('visible');
+    document.getElementById('btn-analyze').disabled = false;
+    resetResults();
+    uploadedImageId = null;  // will upload fresh on analyze
+  }
+
+  // ─── Threshold Slider ──────────────────────────────────
+  function updateThreshDisplay(val) {
+    const v = parseInt(val);
+    const el = document.getElementById('thresh-val');
+    const range = document.getElementById('threshold');
+    el.textContent = v === 0 ? 'AUTO' : (v / 100).toFixed(2);
+    // update gradient
+    range.style.setProperty('--pct', v + '%');
+  }
+
+  // ─── Main Analysis Flow ────────────────────────────────
+  async function runAnalysis() {
+    if (!uploadedFile) return;
+    showError('');
+    setStatus('UPLOADING IMAGE…', true);
+
+    try {
+      // Step 1: Upload
+      const fd = new FormData();
+      fd.append('file', uploadedFile);
+      const upResp = await fetch(`${API}/api/upload`, { method: 'POST', body: fd });
+      if (!upResp.ok) {
+        const err = await upResp.json().catch(() => ({ detail: upResp.statusText }));
+        throw new Error(err.detail || 'Upload failed');
+      }
+      const upData = await upResp.json();
+      uploadedImageId = upData.image_id;
+
+      // Step 2: Analyze
+      setStatus('RUNNING DCT PYRAMID ANALYSIS…', true);
+      const levels = document.getElementById('pyramid-levels').value;
+      const threshRaw = parseInt(document.getElementById('threshold').value);
+      const threshold = threshRaw === 0 ? '' : (threshRaw / 100).toFixed(2);
+
+      const anFd = new FormData();
+      anFd.append('image_id', uploadedImageId);
+      anFd.append('pyramid_levels', levels);
+      if (threshold) anFd.append('threshold', threshold);
+
+      const anResp = await fetch(`${API}/api/analyze`, { method: 'POST', body: anFd });
+      if (!anResp.ok) {
+        const err = await anResp.json().catch(() => ({ detail: anResp.statusText }));
+        throw new Error(err.detail || 'Analysis failed');
+      }
+      const anData = await anResp.json();
+
+      setStatus('RENDERING RESULTS…', false, 90);
+      renderResults(anData);
+      setStatus('COMPLETE ✓', false, 100);
+      setTimeout(() => document.getElementById('status-bar').classList.remove('visible'), 1500);
+
+    } catch (err) {
+      showError(`⚠ ${err.message}`);
+      document.getElementById('status-bar').classList.remove('visible');
+    }
+  }
+
+  // ─── Render Results ────────────────────────────────────
+  function renderResults(data) {
+    const stats = data.statistics;
+    const imgs  = data.output_images;
+
+    // Verdict card
+    const card = document.getElementById('verdict-card');
+    card.className = 'verdict-card visible';
+    if (stats.verdict.includes('Authentic'))   card.classList.add('authentic');
+    else if (stats.verdict.includes('Suspicious')) card.classList.add('suspicious');
+    else if (stats.verdict.includes('Heavily'))    card.classList.add('heavy');
+    else                                           card.classList.add('tampered');
+
+    document.getElementById('verdict-text').textContent = stats.verdict;
+    document.getElementById('vs-fraction').textContent = stats.forgery_fraction + '%';
+    document.getElementById('vs-score').textContent    = stats.anomaly_score_mean.toFixed(3);
+    document.getElementById('vs-conf').textContent     = stats.confidence;
+
+    // Images
+    document.getElementById('img-heatmap').src   = imgs.heatmap_overlay + '?t=' + Date.now();
+    document.getElementById('img-mask').src       = imgs.mask_overlay    + '?t=' + Date.now();
+    document.getElementById('img-pure').src       = imgs.heatmap_pure    + '?t=' + Date.now();
+    document.getElementById('img-composite').src  = imgs.composite       + '?t=' + Date.now();
+
+    // Stats tiles
+    const tiles = [
+      { val: stats.image_resolution,         lbl: 'Image Resolution' },
+      { val: stats.analysis_resolution,      lbl: 'Analysis Resolution' },
+      { val: stats.pyramid_levels_used,      lbl: 'Pyramid Levels' },
+      { val: stats.block_size + '×' + stats.block_size, lbl: 'DCT Block Size' },
+      { val: stats.anomaly_score_mean.toFixed(4), lbl: 'Score Mean' },
+      { val: stats.anomaly_score_max.toFixed(4),  lbl: 'Score Max' },
+      { val: stats.anomaly_score_std.toFixed(4),  lbl: 'Score Std Dev' },
+      { val: stats.threshold,                 lbl: 'Mask Threshold' },
+      { val: stats.forgery_fraction + '%',    lbl: 'Tampered Area' },
+      { val: stats.tampered_pixels.toLocaleString(),  lbl: 'Tampered Pixels' },
+      { val: stats.total_pixels.toLocaleString(),     lbl: 'Total Pixels' },
+      { val: stats.confidence,                lbl: 'Confidence' },
+    ];
+    const grid = document.getElementById('stats-grid');
+    grid.innerHTML = tiles.map(t =>
+      `<div class="stat-tile">
+        <span class="stat-tile-val">${t.val}</span>
+        <span class="stat-tile-lbl">${t.lbl}</span>
+      </div>`
+    ).join('');
+
+    // Pyramid table
+    const tbody = document.getElementById('pyramid-tbody');
+    tbody.innerHTML = (stats.pyramid_levels || []).map(lvl =>
+      `<tr>
+        <td class="num">${lvl.level}</td>
+        <td>${lvl.resolution}</td>
+        <td class="num">${lvl.kurtosis_mean.toFixed(4)}</td>
+        <td class="num">${lvl.kurtosis_std.toFixed(4)}</td>
+        <td class="num">${lvl.entropy_mean.toFixed(4)}</td>
+        <td class="num">${lvl.entropy_std.toFixed(4)}</td>
+        <td class="num">${lvl.variance_mean.toFixed(4)}</td>
+        <td class="num">${lvl.variance_std.toFixed(4)}</td>
+      </tr>`
+    ).join('');
+
+    // JSON block
+    document.getElementById('json-block').textContent = JSON.stringify(data, null, 2);
+
+    document.getElementById('results-section').classList.add('visible');
+    document.getElementById('results-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // ─── Helpers ───────────────────────────────────────────
+  function setStatus(label, indeterminate = true, pct = null) {
+    const bar = document.getElementById('status-bar');
+    bar.classList.add('visible');
+    document.getElementById('status-label').textContent = label;
+    const fill = document.getElementById('progress-fill');
+    if (indeterminate) {
+      fill.classList.add('indeterminate');
+    } else {
+      fill.classList.remove('indeterminate');
+      fill.style.width = (pct || 0) + '%';
+    }
+  }
+
+  function showError(msg) {
+    const box = document.getElementById('error-box');
+    if (msg) { box.textContent = msg; box.classList.add('visible'); }
+    else      { box.textContent = ''; box.classList.remove('visible'); }
+  }
+
+  function resetResults() {
+    document.getElementById('results-section').classList.remove('visible');
+    document.getElementById('verdict-card').classList.remove('visible');
+    document.getElementById('status-bar').classList.remove('visible');
+    showError('');
+  }
+
+  function openLightbox(src) {
+    document.getElementById('lightbox-img').src = src;
+    document.getElementById('lightbox').classList.add('visible');
+  }
+  function closeLightbox() {
+    document.getElementById('lightbox').classList.remove('visible');
+  }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+</script>
+</body>
+</html>
